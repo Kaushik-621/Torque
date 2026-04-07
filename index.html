@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAN Data Visualiser</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Playfair+Display:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <!-- Ambient glow blobs -->
+  <div class="ambient-bg">
+    <div class="glow-orb glow-orb--1"></div>
+    <div class="glow-orb glow-orb--2"></div>
+    <div class="glow-orb glow-orb--3"></div>
+  </div>
+
+  <!-- Header -->
+  <header class="header glass">
+    <div class="header__brand">
+      <div class="header__logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="url(#lg)"/><path d="M7 21L11 13L15 18L19 9L23 15L27 11" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/><defs><linearGradient id="lg" x1="0" y1="0" x2="32" y2="32"><stop stop-color="#00D4FF"/><stop offset="1" stop-color="#7B61FF"/></linearGradient></defs></svg>
+      </div>
+      <div>
+        <h1 class="header__title">CAN Data <span>Visualiser</span></h1>
+        <p class="header__subtitle">Decode · Analyse · Visualise</p>
+      </div>
+    </div>
+    <div class="header__controls">
+      <div class="status-pill" id="fileStatus"><span class="status-pill__dot"></span><span class="status-pill__text">No Data</span></div>
+      <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+        <svg class="theme-toggle__sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg class="theme-toggle__moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar glass" id="sidebar">
+      <!-- Source Tabs -->
+      <div class="source-tabs">
+        <button class="source-tab active" data-source="dbc"><span class="source-tab__icon">🔧</span>DBC Decode</button>
+        <button class="source-tab" data-source="turntide"><span class="source-tab__icon">⚡</span>Turntide</button>
+        <button class="source-tab" data-source="curtis"><span class="source-tab__icon">🏭</span>Curtis</button>
+        <button class="source-tab" data-source="ar"><span class="source-tab__icon">📐</span>AR / General</button>
+      </div>
+
+      <!-- ══ DBC Source Panel ══ -->
+      <div class="source-panel active" id="panel-dbc">
+        <section class="sidebar__section">
+          <h3 class="sidebar__heading">DBC File</h3>
+          <div class="upload-zone glass-inset" id="dbcUploadZone">
+            <input type="file" accept=".dbc" id="dbcFileInput" class="upload-zone__input">
+            <button class="upload-zone__clear" data-clear="dbc" title="Remove file">✕</button>
+            <div class="upload-zone__content"><span class="upload-zone__emoji">📋</span><span class="upload-zone__label">Upload DBC File</span><span class="upload-zone__hint">.dbc database</span></div>
+            <div class="upload-zone__filename" id="dbcFileName"></div>
+          </div>
+        </section>
+        <section class="sidebar__section">
+          <h3 class="sidebar__heading">CAN Log Data</h3>
+          <div class="upload-zone glass-inset" id="canUploadZone">
+            <input type="file" accept=".csv,.trc,.txt,.log" id="canFileInput" class="upload-zone__input">
+            <button class="upload-zone__clear" data-clear="can" title="Remove file">✕</button>
+            <div class="upload-zone__content"><span class="upload-zone__emoji">📊</span><span class="upload-zone__label">Upload Log File</span><span class="upload-zone__hint">.csv or .trc (PCAN trace)</span></div>
+            <div class="upload-zone__filename" id="canFileName"></div>
+          </div>
+        </section>
+        <div class="progress" id="dbcProgress"><div class="progress__bar"><div class="progress__fill" id="dbcProgressFill"></div></div><p class="progress__text" id="dbcProgressText"></p></div>
+        <div class="stats-grid" id="dbcStats">
+          <div class="stat-card glass-inset"><span class="stat-card__value" id="statRows">0</span><span class="stat-card__label">Rows</span></div>
+          <div class="stat-card glass-inset"><span class="stat-card__value" id="statSigs">0</span><span class="stat-card__label">Signals</span></div>
+          <div class="stat-card glass-inset"><span class="stat-card__value" id="statDur">0s</span><span class="stat-card__label">Duration</span></div>
+        </div>
+      </div>
+
+      <!-- ══ Turntide Source Panel ══ -->
+      <div class="source-panel" id="panel-turntide">
+        <section class="sidebar__section">
+          <h3 class="sidebar__heading">Turntide CSV</h3>
+          <div class="upload-zone glass-inset" id="ttUploadZone">
+            <input type="file" accept=".csv" id="ttFileInput" class="upload-zone__input">
+            <button class="upload-zone__clear" data-clear="turntide" title="Remove file">✕</button>
+            <div class="upload-zone__content"><span class="upload-zone__emoji">⚡</span><span class="upload-zone__label">Upload Turntide CSV</span><span class="upload-zone__hint">Paired Time-Value columns</span></div>
+            <div class="upload-zone__filename" id="ttFileName"></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ══ Curtis Source Panel ══ -->
+      <div class="source-panel" id="panel-curtis">
+        <section class="sidebar__section">
+          <h3 class="sidebar__heading">Curtis Excel</h3>
+          <div class="upload-zone glass-inset" id="curtisUploadZone">
+            <input type="file" accept=".xlsx,.xls,.csv" id="curtisFileInput" class="upload-zone__input">
+            <button class="upload-zone__clear" data-clear="curtis" title="Remove file">✕</button>
+            <div class="upload-zone__content"><span class="upload-zone__emoji">🏭</span><span class="upload-zone__label">Upload Curtis File</span><span class="upload-zone__hint">.xlsx (Scaled Data sheet) or .csv</span></div>
+            <div class="upload-zone__filename" id="curtisFileName"></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ══ AR / General Source Panel ══ -->
+      <div class="source-panel" id="panel-ar">
+        <section class="sidebar__section">
+          <h3 class="sidebar__heading">AR / General Data</h3>
+          <div class="upload-zone glass-inset" id="arUploadZone">
+            <input type="file" accept=".csv,.xlsx,.xls,.tsv" id="arFileInput" class="upload-zone__input">
+            <button class="upload-zone__clear" data-clear="ar" title="Remove file">✕</button>
+            <div class="upload-zone__content"><span class="upload-zone__emoji">📐</span><span class="upload-zone__label">Upload CSV or Excel</span><span class="upload-zone__hint">Any tabular time-series data</span></div>
+            <div class="upload-zone__filename" id="arFileName"></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ══ Shared: Signal Selection ══ -->
+      <section class="sidebar__section" id="signalSection">
+        <h3 class="sidebar__heading">Signal Selection</h3>
+        <div class="search-box glass-inset">
+          <svg class="search-box__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" class="search-box__input" id="signalSearch" placeholder="Search signals...">
+        </div>
+        <div class="select-actions">
+          <button class="link-btn" id="selectAllBtn">Select All</button>
+          <button class="link-btn" id="deselectAllBtn">Clear All</button>
+        </div>
+        <div class="signal-list-wrap glass-inset" id="signalListWrap"></div>
+        <div class="selected-tags" id="selectedTags"></div>
+      </section>
+
+      <!-- Plot Button -->
+      <section class="sidebar__section" id="plotSection">
+        <button class="btn btn--glow" id="plotBtn" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+          Plot Selected Signals
+        </button>
+      </section>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main" id="mainContent">
+      <!-- Welcome -->
+      <div class="welcome" id="welcomeState">
+        <div class="welcome__visual">
+          <svg width="90" height="90" viewBox="0 0 90 90" fill="none">
+            <rect width="90" height="90" rx="22" fill="url(#wg)" opacity="0.15"/>
+            <path d="M15 60L28 35L38 50L50 22L60 42L75 28" stroke="url(#wg)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="50" cy="22" r="4" fill="#00D4FF"/>
+            <circle cx="60" cy="42" r="3" fill="#7B61FF"/>
+            <circle cx="28" cy="35" r="3" fill="#FF6B9D"/>
+            <defs><linearGradient id="wg" x1="0" y1="0" x2="90" y2="90"><stop stop-color="#00D4FF"/><stop offset="0.5" stop-color="#7B61FF"/><stop offset="1" stop-color="#FF6B9D"/></linearGradient></defs>
+          </svg>
+        </div>
+        <h2 class="welcome__title">CAN Data Visualiser</h2>
+        <p class="welcome__text">Select a data source, upload your files, choose signals, and create interactive visualisations.</p>
+        <div class="welcome__steps">
+          <div class="step-card glass"><span class="step-card__num">1</span><span class="step-card__text">Choose source &amp; upload</span></div>
+          <div class="step-card glass"><span class="step-card__num">2</span><span class="step-card__text">Select signals</span></div>
+          <div class="step-card glass"><span class="step-card__num">3</span><span class="step-card__text">Analyse &amp; export</span></div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar glass" id="toolbar">
+        <div class="toolbar__group">
+          <span class="toolbar__label">View</span>
+          <div class="toggle-group">
+            <button class="toggle-btn active" data-view="combined">Combined</button>
+            <button class="toggle-btn" data-view="separate">Separate</button>
+          </div>
+        </div>
+        <div class="toolbar__group">
+          <span class="toolbar__label">Time</span>
+          <input type="text" class="input-field input-sm" id="timeStart" placeholder="Start">
+          <span class="toolbar__arrow">→</span>
+          <input type="text" class="input-field input-sm" id="timeEnd" placeholder="End">
+          <button class="btn btn--ghost btn--sm" id="applyTimeBtn">Apply</button>
+          <button class="btn btn--ghost btn--sm" id="resetTimeBtn">Reset</button>
+        </div>
+        <div class="toolbar__group">
+          <span class="toolbar__label">Height</span>
+          <input type="range" class="range-slider" min="180" max="600" value="340" id="chartHeight">
+        </div>
+        <div class="toolbar__spacer"></div>
+        <button class="btn btn--outline btn--sm" id="exportChartsBtn">📷 Charts</button>
+        <button class="btn btn--outline btn--sm" id="exportCsvBtn">💾 CSV</button>
+        <button class="btn btn--outline btn--sm" id="clearMarkersBtn">🧹 Markers</button>
+      </div>
+
+      <!-- Charts -->
+      <div class="charts-area" id="chartsArea"></div>
+
+      <!-- Markers -->
+      <div class="markers-panel glass" id="markersPanel">
+        <h3 class="markers-panel__title">📌 Pinned Markers</h3>
+        <div id="markersList" class="markers-panel__list"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Download Modal -->
+  <div class="modal-overlay" id="downloadModal">
+    <div class="modal glass">
+      <div class="modal__header"><h3 class="modal__title">Export Decoded Data</h3><button class="modal__close" id="modalCloseBtn">&times;</button></div>
+      <div class="modal__body">
+        <button class="modal-option glass-inset" data-mode="selected"><strong>Selected Signals</strong><span>Only plotted signals</span></button>
+        <button class="modal-option glass-inset" data-mode="all"><strong>All Signals</strong><span>Every decoded signal</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"><span id="toastIcon"></span><span id="toastMsg"></span></div>
+
+  <script src="parsers.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
